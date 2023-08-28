@@ -6,7 +6,6 @@
   ==============================================================================
 */
 
-#include <Windows.h>
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
@@ -47,7 +46,12 @@ HWND find_main_window(unsigned long process_id)
 #pragma endregion
 
 //==============================================================================
-NoThrottleAudioProcessor::NoThrottleAudioProcessor() 
+
+using Parameter = juce::AudioProcessorValueTreeState::Parameter;
+
+NoThrottleAudioProcessor::NoThrottleAudioProcessor() :
+	apvts(*this, nullptr, "PARAMETERS", { std::make_unique<juce::AudioParameterChoice>("gtrl", "GUI Throttling",juce::StringArray { "On", "Off", "Default", "Skip",},0)
+		})
 #ifndef JucePlugin_PreferredChannelConfigurations
 	: AudioProcessor(BusesProperties()
 #if ! JucePlugin_IsMidiEffect
@@ -59,7 +63,10 @@ NoThrottleAudioProcessor::NoThrottleAudioProcessor()
 	)
 #endif
 {
-	reservedBypassParameter = new juce::AudioParameterBool("byps", "<Reserved>", false);
+	apvts.getParameter("gtrl")->addListener(this);
+
+	gtrl = apvts.getParameter("gtrl");
+	//reservedBypassParameter = new juce::AudioParameterBool("byps", "<Reserved>", false);
 
 	HWND hwnd = find_main_window(GetCurrentProcessId());
 	guiThreadId = GetWindowThreadProcessId(hwnd, NULL);
@@ -180,7 +187,8 @@ bool NewProjectAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts
 
 juce::AudioProcessorParameter* NoThrottleAudioProcessor::getBypassParameter() const
 {
-	return reservedBypassParameter;
+	// The only way to get rid of the automatic 'Bypass' parameter
+	return apvts.getParameter("gtrl");
 }
 
 void NoThrottleAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
@@ -245,6 +253,9 @@ juce::AudioProcessorEditor* NoThrottleAudioProcessor::createEditor()
 void NoThrottleAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
 	UNREFERENCED_PARAMETER(destData);
+
+	MemoryOutputStream(destData, true).writeFloat(gtrl->getValue());
+
 	// You should use this method to store your parameters in the memory block.
 	// You could do that either as raw data, or use the XML or ValueTree classes
 	// as intermediaries to make it easy to save and load complex data.
@@ -254,6 +265,8 @@ void NoThrottleAudioProcessor::setStateInformation(const void* data, int sizeInB
 {
 	UNREFERENCED_PARAMETER(data);
 	UNREFERENCED_PARAMETER(sizeInBytes);
+
+	gtrl->setValueNotifyingHost(MemoryInputStream(data, static_cast<size_t> (sizeInBytes), false).readFloat());
 	// You should use this method to restore your parameters from this memory block,
 	// whose contents will have been created by the getStateInformation() call.
 }
@@ -269,16 +282,39 @@ void NoThrottleAudioProcessor::timerCallback()
 {
 	if ((guiAdjustCount % 4) == 0)
 	{
-		THREAD_POWER_THROTTLING_STATE throttling_state;
-		memset(&throttling_state, 0, sizeof(throttling_state));
-		throttling_state.Version = THREAD_POWER_THROTTLING_CURRENT_VERSION;
-		throttling_state.ControlMask = THREAD_POWER_THROTTLING_EXECUTION_SPEED;
-		throttling_state.StateMask = THREAD_POWER_THROTTLING_EXECUTION_SPEED;;
-		HANDLE threadHandle = OpenThread(THREAD_ALL_ACCESS, FALSE, guiThreadId);
-		if (threadHandle != NULL)
+		juce::AudioParameterChoice* d = (juce::AudioParameterChoice*)gtrl;
+		int choice = d->getIndex();
+
+		if (choice < 3) // Skip means -> stay away from it
 		{
-			SetThreadInformation(threadHandle, ThreadPowerThrottling, &throttling_state, sizeof(throttling_state));
-			CloseHandle(threadHandle);
+			THREAD_POWER_THROTTLING_STATE throttling_state;
+			memset(&throttling_state, 0, sizeof(throttling_state));
+
+			switch (choice)
+			{
+			case 0: //On
+				throttling_state.Version = THREAD_POWER_THROTTLING_CURRENT_VERSION;
+				throttling_state.ControlMask = THREAD_POWER_THROTTLING_EXECUTION_SPEED;
+				throttling_state.StateMask = THREAD_POWER_THROTTLING_EXECUTION_SPEED;;
+				break;
+			case 1: //Off
+				throttling_state.Version = THREAD_POWER_THROTTLING_CURRENT_VERSION;
+				throttling_state.ControlMask = THREAD_POWER_THROTTLING_EXECUTION_SPEED;
+				throttling_state.StateMask = 0;
+				break;
+			default: //Default
+				throttling_state.Version = THREAD_POWER_THROTTLING_CURRENT_VERSION;
+				throttling_state.ControlMask = 0;
+				throttling_state.StateMask = 0;
+				break;
+
+			}
+			HANDLE threadHandle = OpenThread(THREAD_ALL_ACCESS, FALSE, guiThreadId);
+			if (threadHandle != NULL)
+			{
+				SetThreadInformation(threadHandle, ThreadPowerThrottling, &throttling_state, sizeof(throttling_state));
+				CloseHandle(threadHandle);
+			}
 		}
 	}
 
@@ -291,14 +327,29 @@ void NoThrottleAudioProcessor::timerCallback()
 #if Juce_Listener
 void NoThrottleAudioProcessor::parameterValueChanged(int parameterIndex, float newValue)
 {
-	std::cout << parameterIndex << std::endl;
-
-	if (parameterIndex == 0)
+	UNREFERENCED_PARAMETER(newValue);
+	if (parameterIndex == gtrl->getParameterIndex())
 	{
-		
-	}
+		juce::AudioParameterChoice* d = (juce::AudioParameterChoice*)gtrl;
+		int choice = d->getIndex();
+		if (choice == 3) // skip. Reset once to default and then nothing
+		{
+			THREAD_POWER_THROTTLING_STATE throttling_state;
+			memset(&throttling_state, 0, sizeof(throttling_state));
+			throttling_state.Version = THREAD_POWER_THROTTLING_CURRENT_VERSION;
+			throttling_state.ControlMask = 0;
+			throttling_state.StateMask = 0;
 
+			HANDLE threadHandle = OpenThread(THREAD_ALL_ACCESS, FALSE, guiThreadId);
+			if (threadHandle != NULL)
+			{
+				SetThreadInformation(threadHandle, ThreadPowerThrottling, &throttling_state, sizeof(throttling_state));
+				CloseHandle(threadHandle);
+			}
+		}
+	}
 }
+
 void NoThrottleAudioProcessor::parameterGestureChanged(int, bool)
 {
 }

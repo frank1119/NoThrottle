@@ -8,9 +8,10 @@
 
 #pragma once
 
+#include <Windows.h>
 #include <JuceHeader.h>
 
-#define Juce_Listener 0
+#define Juce_Listener 1
 
 //==============================================================================
 /**
@@ -21,7 +22,7 @@ class NoThrottleAudioProcessor : public juce::AudioProcessor
 							#endif
 							, public juce::Timer
 							#if Juce_Listener
-							, public AudioProcessorParameter::Listener
+							, public juce::AudioProcessorParameter::Listener
 							#endif
 
 {
@@ -40,8 +41,11 @@ public:
 	#endif
 	virtual juce::AudioProcessorParameter* getBypassParameter() const override;
 
-	juce::AudioProcessorParameter *reservedBypassParameter;
+	//juce::AudioProcessorParameter *reservedBypassParameter;
 	
+	juce::AudioProcessorParameter *gtrl;
+
+	juce::AudioProcessorValueTreeState apvts;
 
 #ifndef JucePlugin_PreferredChannelConfigurations
 	bool isBusesLayoutSupported(const BusesLayout& layouts) const override;
