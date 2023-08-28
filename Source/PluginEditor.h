@@ -65,38 +65,6 @@ private:
     ComboBoxParameterAttachment attachment;
 };
 
-/*
-struct GetTrackInfo
-{
-    // Combo boxes need a lot of room
-    Grid::TrackInfo operator() (AttachedCombo&)             const { return 200_px; }
-
-    // Toggles are a bit smaller
-    //Grid::TrackInfo operator() (AttachedToggle&)            const { return 80_px; }
-
-    // Sliders take up as much room as they can
-    //Grid::TrackInfo operator() (AttachedSlider&)            const { return 1_fr; }
-};
-
-
-template <typename... Components>
-static void performLayout(const juce::Rectangle<int>& bounds, Components&... components)
-{
-    Grid grid;
-    using Track = Grid::TrackInfo;
-
-    grid.autoColumns = Track(1_fr);
-    grid.autoRows = Track(1_fr);
-    grid.columnGap = Grid::Px(10);
-    grid.rowGap = Grid::Px(0);
-    grid.autoFlow = Grid::AutoFlow::column;
-
-    grid.templateColumns = { GetTrackInfo{} (components)... };
-    grid.items = { GridItem(components)... };
-
-    grid.performLayout(bounds);
-}
-*/
 //==============================================================================
 
 

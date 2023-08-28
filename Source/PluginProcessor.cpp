@@ -17,13 +17,10 @@ struct handle_data {
 	HWND window_handle;
 };
 
-
 BOOL is_main_window(HWND handle)
 {
 	return GetWindow(handle, GW_OWNER) == (HWND)0 && IsWindowVisible(handle);
 }
-
-
 
 BOOL CALLBACK enum_windows_callback(HWND handle, LPARAM lParam)
 {
@@ -35,9 +32,10 @@ BOOL CALLBACK enum_windows_callback(HWND handle, LPARAM lParam)
 	data.window_handle = handle;
 	return FALSE;
 }
+
 HWND find_main_window(unsigned long process_id)
 {
-	handle_data data;
+	handle_data data = {};
 	data.process_id = process_id;
 	data.window_handle = 0;
 	EnumWindows(enum_windows_callback, (LPARAM)&data);
@@ -50,7 +48,8 @@ HWND find_main_window(unsigned long process_id)
 using Parameter = juce::AudioProcessorValueTreeState::Parameter;
 
 NoThrottleAudioProcessor::NoThrottleAudioProcessor() :
-	apvts(*this, nullptr, "PARAMETERS", { std::make_unique<juce::AudioParameterChoice>("gtrl", "GUI Throttling",juce::StringArray { "On", "Off", "Default", "Skip",},0)
+	apvts(*this, nullptr, "PARAMETERS", {
+		std::make_unique<juce::AudioParameterChoice>("gtrl", "GUI Throttling", juce::StringArray{"On", "Off", "Default", "Skip"}, 3)
 		})
 #ifndef JucePlugin_PreferredChannelConfigurations
 	: AudioProcessor(BusesProperties()
@@ -63,14 +62,14 @@ NoThrottleAudioProcessor::NoThrottleAudioProcessor() :
 	)
 #endif
 {
-	apvts.getParameter("gtrl")->addListener(this);
-
 	gtrl = apvts.getParameter("gtrl");
-	//reservedBypassParameter = new juce::AudioParameterBool("byps", "<Reserved>", false);
+
+	gtrl->addListener(this);
 
 	HWND hwnd = find_main_window(GetCurrentProcessId());
 	guiThreadId = GetWindowThreadProcessId(hwnd, NULL);
 	startTimerHz(4);
+
 }
 
 NoThrottleAudioProcessor::~NoThrottleAudioProcessor()
@@ -188,7 +187,7 @@ bool NewProjectAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts
 juce::AudioProcessorParameter* NoThrottleAudioProcessor::getBypassParameter() const
 {
 	// The only way to get rid of the automatic 'Bypass' parameter
-	return apvts.getParameter("gtrl");
+	return gtrl;
 }
 
 void NoThrottleAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
@@ -196,7 +195,6 @@ void NoThrottleAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
 	UNREFERENCED_PARAMETER(buffer);
 	UNREFERENCED_PARAMETER(midiMessages);
 	juce::ScopedNoDenormals noDenormals;
-
 
 	samplesPast += buffer.getNumSamples();
 	double srate = getSampleRate();
@@ -212,8 +210,6 @@ void NoThrottleAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
 		SetThreadInformation(GetCurrentThread(), ThreadPowerThrottling, &throttling_state, sizeof(throttling_state));
 		prcAdjustCount = (prcAdjustCount + 1) % 4;
 	}
-
-
 
 	// In case we have more outputs than inputs, this code clears any output
 	// channels that didn't contain input data, (because these aren't
@@ -280,6 +276,7 @@ juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 
 void NoThrottleAudioProcessor::timerCallback()
 {
+
 	if ((guiAdjustCount % 4) == 0)
 	{
 		juce::AudioParameterChoice* d = (juce::AudioParameterChoice*)gtrl;
@@ -292,23 +289,23 @@ void NoThrottleAudioProcessor::timerCallback()
 
 			switch (choice)
 			{
-			case 0: //On
+			case 0: // On
 				throttling_state.Version = THREAD_POWER_THROTTLING_CURRENT_VERSION;
 				throttling_state.ControlMask = THREAD_POWER_THROTTLING_EXECUTION_SPEED;
 				throttling_state.StateMask = THREAD_POWER_THROTTLING_EXECUTION_SPEED;;
 				break;
-			case 1: //Off
+			case 1: // Off
 				throttling_state.Version = THREAD_POWER_THROTTLING_CURRENT_VERSION;
 				throttling_state.ControlMask = THREAD_POWER_THROTTLING_EXECUTION_SPEED;
 				throttling_state.StateMask = 0;
 				break;
-			default: //Default
+			default: // Default
 				throttling_state.Version = THREAD_POWER_THROTTLING_CURRENT_VERSION;
 				throttling_state.ControlMask = 0;
 				throttling_state.StateMask = 0;
 				break;
-
 			}
+
 			HANDLE threadHandle = OpenThread(THREAD_ALL_ACCESS, FALSE, guiThreadId);
 			if (threadHandle != NULL)
 			{
@@ -324,15 +321,16 @@ void NoThrottleAudioProcessor::timerCallback()
 		ae->repaint();
 }
 
-#if Juce_Listener
 void NoThrottleAudioProcessor::parameterValueChanged(int parameterIndex, float newValue)
 {
 	UNREFERENCED_PARAMETER(newValue);
 	if (parameterIndex == gtrl->getParameterIndex())
 	{
 		juce::AudioParameterChoice* d = (juce::AudioParameterChoice*)gtrl;
+
 		int choice = d->getIndex();
-		if (choice == 3) // skip. Reset once to default and then nothing
+
+		if (choice == 3 && gtrl_val != 3) // skip. Reset once to default and then nothing
 		{
 			THREAD_POWER_THROTTLING_STATE throttling_state;
 			memset(&throttling_state, 0, sizeof(throttling_state));
@@ -347,10 +345,10 @@ void NoThrottleAudioProcessor::parameterValueChanged(int parameterIndex, float n
 				CloseHandle(threadHandle);
 			}
 		}
+		gtrl_val = choice;
 	}
 }
 
 void NoThrottleAudioProcessor::parameterGestureChanged(int, bool)
 {
 }
-#endif

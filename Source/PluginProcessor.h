@@ -8,23 +8,19 @@
 
 #pragma once
 
-#include <Windows.h>
-#include <JuceHeader.h>
 
-#define Juce_Listener 1
+#include <JuceHeader.h>
+#include <Windows.h>
 
 //==============================================================================
 /**
 */
 class NoThrottleAudioProcessor : public juce::AudioProcessor
-							#if JucePlugin_Enable_ARA
-							, public juce::AudioProcessorARAExtension
-							#endif
-							, public juce::Timer
-							#if Juce_Listener
-							, public juce::AudioProcessorParameter::Listener
-							#endif
-
+	#if JucePlugin_Enable_ARA
+	, public juce::AudioProcessorARAExtension
+	#endif
+	, public juce::Timer
+	, public juce::AudioProcessorParameter::Listener
 {
 public:
 	//==============================================================================
@@ -35,17 +31,16 @@ public:
 	void prepareToPlay(double sampleRate, int samplesPerBlock) override;
 	void releaseResources() override;
 
-	#if Juce_Listener
 	void virtual parameterValueChanged(int, float) override;
 	void virtual parameterGestureChanged(int, bool) override;
-	#endif
+
 	virtual juce::AudioProcessorParameter* getBypassParameter() const override;
 
-	//juce::AudioProcessorParameter *reservedBypassParameter;
-	
-	juce::AudioProcessorParameter *gtrl;
-
 	juce::AudioProcessorValueTreeState apvts;
+
+	juce::AudioProcessorParameter *gtrl;
+	int gtrl_val = 3;
+
 
 #ifndef JucePlugin_PreferredChannelConfigurations
 	bool isBusesLayoutSupported(const BusesLayout& layouts) const override;

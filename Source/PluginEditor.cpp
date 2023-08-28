@@ -9,6 +9,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+
 //==============================================================================
 NoThrottleAudioProcessorEditor::NoThrottleAudioProcessorEditor(NoThrottleAudioProcessor& p)
 	: AudioProcessorEditor(&p), audioProcessor(p)
@@ -23,7 +24,6 @@ NoThrottleAudioProcessorEditor::NoThrottleAudioProcessorEditor(NoThrottleAudioPr
 	r.setHeight((int)(((float)r.getHeight()) * 0.66));
 	
 	cmbGuiThrottle->setBounds(r.withPosition(10,5));
-	
 }
 
 NoThrottleAudioProcessorEditor::~NoThrottleAudioProcessorEditor()
